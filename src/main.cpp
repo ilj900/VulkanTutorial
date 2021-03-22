@@ -4,6 +4,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <cstdlib>
+#include <vector>
 
 const std::uint32_t WIDTH = 1920;
 const std::uint32_t HEIGHT = 1080;
@@ -30,10 +31,39 @@ private:
         Window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
     }
 
+    void CreateInstance()
+    {
+        VkApplicationInfo AppInfo{};
+        AppInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+        AppInfo.pApplicationName = "Hello Triangle";
+        AppInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+        AppInfo.pEngineName = "No Engine";
+        AppInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+        AppInfo.apiVersion = VK_API_VERSION_1_0;
+
+        VkInstanceCreateInfo CreateInfo{};
+        CreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+        CreateInfo.pApplicationInfo = &AppInfo;
+
+        uint32_t GLFWExtensionCount = 0;
+        const char** GLFWExtensions;
+
+        GLFWExtensions = glfwGetRequiredInstanceExtensions(&GLFWExtensionCount);
+
+        CreateInfo.enabledExtensionCount = GLFWExtensionCount;
+        CreateInfo.ppEnabledExtensionNames = GLFWExtensions;
+
+        CreateInfo.enabledLayerCount = 0;
+
+        if (vkCreateInstance(&CreateInfo, nullptr, &Instance) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create instance!");
+        }
+    }
 
     void InitVulkan()
     {
-
+        CreateInstance();
     }
 
     void MainLoop()
@@ -46,6 +76,8 @@ private:
 
     void Cleanup()
     {
+        vkDestroyInstance(Instance, nullptr);
+
         glfwDestroyWindow(Window);
 
         glfwTerminate();
@@ -53,11 +85,13 @@ private:
 
     GLFWwindow* Window;
 
+    VkInstance Instance;
+
 };
 
 int main()
 {
-    FHelloTriangleApplication App;\
+    FHelloTriangleApplication App;
 
     try {
         App.Run();
