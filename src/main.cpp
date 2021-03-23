@@ -266,7 +266,44 @@ private:
         }
 
         return Indices;
+    }
 
+    void CreateLogicalDevice()
+    {
+        QueueFamilyIndices Indices = FindQueueFamilies(PhysicalDevice);
+
+        VkDeviceQueueCreateInfo QueueCreateInfo{};
+        QueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        QueueCreateInfo.queueFamilyIndex = Indices.GraphicsFamily.value();
+        QueueCreateInfo.queueCount = 1;
+
+        float QueuePriority = 1.f;
+        QueueCreateInfo.pQueuePriorities = &QueuePriority;
+
+        VkPhysicalDeviceFeatures DeviceFeatures{};
+
+        VkDeviceCreateInfo CreateInfo{};
+        CreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        CreateInfo.pQueueCreateInfos = &QueueCreateInfo;
+        CreateInfo.queueCreateInfoCount = 1;
+        CreateInfo.pEnabledFeatures = &DeviceFeatures;
+        CreateInfo.enabledExtensionCount = 0;
+        if (bEnableValidationLayers)
+        {
+            CreateInfo.enabledLayerCount = static_cast<uint>(ValidationLayers.size());
+            CreateInfo.ppEnabledLayerNames = ValidationLayers.data();
+        }
+        else
+        {
+            CreateInfo.enabledLayerCount = 0;
+        }
+
+        if (vkCreateDevice(PhysicalDevice, &CreateInfo, nullptr, &Device) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to create logical device!");
+        }
+
+        vkGetDeviceQueue(Device, Indices.GraphicsFamily.value(), 0, &GraphicsQueue);
     }
 
     void InitVulkan()
@@ -274,6 +311,7 @@ private:
         CreateInstance();
         SetupDebugMessenger();
         PickPhysicalDevice();
+        CreateLogicalDevice();
     }
 
     void MainLoop()
@@ -286,6 +324,7 @@ private:
 
     void Cleanup()
     {
+        vkDestroyDevice(Device, nullptr);
         if (bEnableValidationLayers)
         {
             DestroyDebugUtilsMessengerEXT(Instance, DebugMessenger, nullptr);
@@ -303,6 +342,8 @@ private:
     VkInstance Instance;
     VkDebugUtilsMessengerEXT DebugMessenger;
     VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE;
+    VkDevice Device;
+    VkQueue GraphicsQueue;
 
 };
 
