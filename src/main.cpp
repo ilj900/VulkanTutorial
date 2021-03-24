@@ -506,6 +506,34 @@ private:
         }
     }
 
+    void CreateImageView()
+    {
+        SwapChainImageViews.resize(SwapChainImages.size());
+
+        for (std::size_t i = 0; i < SwapChainImages.size(); ++i)
+        {
+            VkImageViewCreateInfo  CreateInfo{};
+            CreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            CreateInfo.image = SwapChainImages[i];
+            CreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            CreateInfo.format = SwapChainImageFormat;
+            CreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            CreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            CreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            CreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+            CreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            CreateInfo.subresourceRange.baseMipLevel = 0;
+            CreateInfo.subresourceRange.levelCount = 1;
+            CreateInfo.subresourceRange.baseArrayLayer = 0;
+            CreateInfo.subresourceRange.layerCount = 1;
+
+            if (vkCreateImageView(Device, &CreateInfo, nullptr, &SwapChainImageViews[i]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("Failed to create image views!");
+            }
+        }
+    }
+
     void InitVulkan()
     {
         CreateInstance();
@@ -514,6 +542,7 @@ private:
         PickPhysicalDevice();
         CreateLogicalDevice();
         CreateSwapChain();
+        CreateImageView();
     }
 
     void MainLoop()
@@ -526,6 +555,10 @@ private:
 
     void Cleanup()
     {
+        for (auto ImageView : SwapChainImageViews)
+        {
+            vkDestroyImageView(Device, ImageView, nullptr);
+        }
         vkDestroySwapchainKHR(Device, SwapChain, nullptr);
         vkDestroyDevice(Device, nullptr);
 
@@ -553,6 +586,7 @@ private:
     std::vector<VkImage> SwapChainImages;
     VkFormat SwapChainImageFormat;
     VkExtent2D SwapChainExtent;
+    std::vector<VkImageView> SwapChainImageViews;
 
 };
 
