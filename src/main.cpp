@@ -592,6 +592,82 @@ private:
 
         VkPipelineShaderStageCreateInfo ShaderStages[] = {VertShaderStageInfo, FragmentShaderStageInfo};
 
+        VkPipelineVertexInputStateCreateInfo VertexInputInfo{};
+        VertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        VertexInputInfo.vertexBindingDescriptionCount = 0;
+        VertexInputInfo.pVertexBindingDescriptions = nullptr;
+        VertexInputInfo.vertexAttributeDescriptionCount = 0;
+        VertexInputInfo.pVertexAttributeDescriptions = 0;
+
+        VkPipelineInputAssemblyStateCreateInfo InputAssembly{};
+        InputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        InputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        InputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        VkViewport Viewport{};
+        Viewport.x = 0.f;
+        Viewport.y = 0.f;
+        Viewport.width = (float)SwapChainExtent.width;
+        Viewport.height = (float)SwapChainExtent.height;
+        Viewport.minDepth = 0.f;
+        Viewport.maxDepth = 1.f;
+
+        VkRect2D Scissors{};
+        Scissors.offset = {0, 0};
+        Scissors.extent = SwapChainExtent;
+
+        VkPipelineViewportStateCreateInfo ViewportState{};
+        ViewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        ViewportState.viewportCount = 1;
+        ViewportState.pViewports = &Viewport;
+        ViewportState.scissorCount = 1;
+        ViewportState.pScissors = &Scissors;
+
+        VkPipelineRasterizationStateCreateInfo Rasterizer{};
+        Rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        Rasterizer.depthClampEnable = VK_FALSE;
+        Rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        Rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        Rasterizer.lineWidth = 1.f;
+        Rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        Rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        Rasterizer.depthBiasEnable = VK_FALSE;
+        Rasterizer.depthBiasConstantFactor = 0.f;
+        Rasterizer.depthBiasClamp = 0.f;
+        Rasterizer.depthBiasSlopeFactor = 0.f;
+
+        VkPipelineMultisampleStateCreateInfo Multisampling{};
+        Multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        Multisampling.sampleShadingEnable = VK_FALSE;
+        Multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        Multisampling.minSampleShading = 1.f;
+        Multisampling.pSampleMask = nullptr;
+        Multisampling.alphaToCoverageEnable = VK_FALSE;
+        Multisampling.alphaToOneEnable = VK_FALSE;
+
+        VkPipelineColorBlendAttachmentState ColorBlendAttachment{};
+        ColorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        ColorBlendAttachment.blendEnable = VK_FALSE;
+        ColorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        ColorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+        ColorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+        ColorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        ColorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        ColorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+        VkPipelineLayoutCreateInfo PipelineLayoutInfo{};
+        PipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        PipelineLayoutInfo.setLayoutCount = 0;
+        PipelineLayoutInfo.pSetLayouts = nullptr;
+        PipelineLayoutInfo.pushConstantRangeCount = 0;
+        PipelineLayoutInfo.pPushConstantRanges = nullptr;
+
+        if (vkCreatePipelineLayout(Device, &PipelineLayoutInfo, nullptr, &PipelineLayout) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to create pipeline layout!");
+        }
+
         vkDestroyShaderModule(Device, FragmentShaderModule, nullptr);
         vkDestroyShaderModule(Device, VertexShaderModule, nullptr);
     }
@@ -618,6 +694,7 @@ private:
 
     void Cleanup()
     {
+        vkDestroyPipelineLayout(Device, PipelineLayout, nullptr);
         for (auto ImageView : SwapChainImageViews)
         {
             vkDestroyImageView(Device, ImageView, nullptr);
@@ -650,6 +727,7 @@ private:
     VkFormat SwapChainImageFormat;
     VkExtent2D SwapChainExtent;
     std::vector<VkImageView> SwapChainImageViews;
+    VkPipelineLayout PipelineLayout;
 
 };
 
