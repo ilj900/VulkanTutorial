@@ -572,8 +572,8 @@ private:
 
     void CreateGraphicsPipelines()
     {
-        auto VertexShaderCode = ReadFile("shaders/triangle_vert.spv");
-        auto FragmentShaderCode = ReadFile("shaders/triangle_frag.spv");
+        auto VertexShaderCode = ReadFile("../shaders/triangle_vert.spv");
+        auto FragmentShaderCode = ReadFile("../shaders/triangle_frag.spv");
 
         VkShaderModule VertexShaderModule = CreateShaderModule(VertexShaderCode);
         VkShaderModule FragmentShaderModule = CreateShaderModule(FragmentShaderCode);
@@ -656,6 +656,18 @@ private:
         ColorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
         ColorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
 
+        VkPipelineColorBlendStateCreateInfo ColorBlending{};
+        ColorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        ColorBlending.logicOpEnable = VK_FALSE;
+        ColorBlending.logicOp = VK_LOGIC_OP_COPY;
+        ColorBlending.attachmentCount = 1;
+        ColorBlending.pAttachments = &ColorBlendAttachment;
+        ColorBlending.blendConstants[0] = 0.f;
+        ColorBlending.blendConstants[1] = 0.f;
+        ColorBlending.blendConstants[2] = 0.f;
+        ColorBlending.blendConstants[3] = 0.f;
+
+
         VkPipelineLayoutCreateInfo PipelineLayoutInfo{};
         PipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         PipelineLayoutInfo.setLayoutCount = 0;
@@ -666,6 +678,29 @@ private:
         if (vkCreatePipelineLayout(Device, &PipelineLayoutInfo, nullptr, &PipelineLayout) != VK_SUCCESS)
         {
             throw std::runtime_error("Failed to create pipeline layout!");
+        }
+
+        VkGraphicsPipelineCreateInfo PipelineInfo{};
+        PipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        PipelineInfo.stageCount = 2;
+        PipelineInfo.pStages = ShaderStages;
+        PipelineInfo.pVertexInputState = &VertexInputInfo;
+        PipelineInfo.pInputAssemblyState = &InputAssembly;
+        PipelineInfo.pViewportState = &ViewportState;
+        PipelineInfo.pRasterizationState = &Rasterizer;
+        PipelineInfo.pMultisampleState = &Multisampling;
+        PipelineInfo.pDepthStencilState = nullptr;
+        PipelineInfo.pColorBlendState = &ColorBlending;
+        PipelineInfo.pDepthStencilState = nullptr;
+        PipelineInfo.layout = PipelineLayout;
+        PipelineInfo.renderPass = RenderPass;
+        PipelineInfo.subpass = 0;
+        PipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+        PipelineInfo.basePipelineIndex = -1;
+
+        if (vkCreateGraphicsPipelines(Device, VK_NULL_HANDLE, 1, &PipelineInfo, nullptr, &GraphicsPipeline) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to create graphics pipeline!");
         }
 
         vkDestroyShaderModule(Device, FragmentShaderModule, nullptr);
@@ -706,6 +741,28 @@ private:
         }
     }
 
+    void CreateFramebuffers()
+    {
+        SwapChainFramebuffers.resize(SwapChainImageViews.size());
+        for (std::size_t i = 0; i < SwapChainImageViews.size(); ++i) {
+            VkImageView Attachments[] = {SwapChainImageViews[i]};
+
+            VkFramebufferCreateInfo FramebufferInfo{};
+            FramebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            FramebufferInfo.renderPass = RenderPass;
+            FramebufferInfo.attachmentCount = 1;
+            FramebufferInfo.pAttachments = Attachments;
+            FramebufferInfo.width = SwapChainExtent.width;
+            FramebufferInfo.height = SwapChainExtent.height;
+            FramebufferInfo.layers = 1;
+
+            if (vkCreateFramebuffer(Device, &FramebufferInfo, nullptr, &SwapChainFramebuffers[i]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("Failed to create framebuffer!");
+            }
+        }
+    }
+
     void InitVulkan()
     {
         CreateInstance();
@@ -717,6 +774,7 @@ private:
         CreateImageView();
         CreateRenderPass();
         CreateGraphicsPipelines();
+        CreateFramebuffers();
     }
 
     void MainLoop()
@@ -729,6 +787,11 @@ private:
 
     void Cleanup()
     {
+        for (auto Framebuffer : SwapChainFramebuffers)
+        {
+            vkDestroyFramebuffer(Device, Framebuffer, nullptr);
+        }
+        vkDestroyPipeline(Device, GraphicsPipeline, nullptr);
         vkDestroyPipelineLayout(Device, PipelineLayout, nullptr);
         vkDestroyRenderPass(Device, RenderPass, nullptr);
         for (auto ImageView : SwapChainImageViews)
@@ -765,6 +828,8 @@ private:
     std::vector<VkImageView> SwapChainImageViews;
     VkPipelineLayout PipelineLayout;
     VkRenderPass RenderPass;
+    VkPipeline GraphicsPipeline;
+    std::vector<VkFramebuffer> SwapChainFramebuffers;
 
 };
 
