@@ -18,7 +18,8 @@ link_directories(libs)
 
 set(SOURCE src/main.cpp)
 
-set(INCLUDE include/main.h)
+set(INCLUDE include/main.h
+            include/stb_image.h)
 
 add_executable(vulkan_tutorial ${SOURCE} ${INCLUDE})
 
