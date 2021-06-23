@@ -19,7 +19,8 @@ link_directories(libs)
 set(SOURCE src/main.cpp)
 
 set(INCLUDE include/main.h
-            include/stb_image.h)
+            include/stb_image.h
+            include/tiny_obj_loader.h)
 
 add_executable(vulkan_tutorial ${SOURCE} ${INCLUDE})
 

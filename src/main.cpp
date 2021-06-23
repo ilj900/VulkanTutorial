@@ -3,9 +3,11 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#define GLM_ENABLE_EXPERIMENTAL
 
 #include "glm/glm.hpp"
-#include <glm/gtc/matrix_transform.hpp>
+#include "glm/gtc/matrix_transform.hpp"
+#include "glm/gtx/hash.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -19,12 +21,19 @@
 #include <set>
 #include <stdexcept>
 #include <vector>
+#include <unordered_map>
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
 
 using uint = std::uint32_t;
 
 const uint WIDTH = 1920;
 const uint HEIGHT = 1080;
 const int MAX_FRAMES_IN_FLIGHT = 2;
+
+const std::string MODEL_PATH = "models/viking_room/viking_room.obj";
+const std::string TEXTURE_PATH = "models/viking_room/viking_room.png";
 
 const std::vector<const char*> ValidationLayers = {
         "VK_LAYER_KHRONOS_validation"
@@ -75,6 +84,22 @@ struct Vertex {
 
         return AttributeDescription;
     }
+
+    bool operator==(const Vertex& Other) const
+    {
+        return Pos == Other.Pos && Color == Other.Color && TexCoord == Other.TexCoord;
+    }
+
+};
+
+template<> struct std::hash<Vertex>
+{
+    size_t operator()(Vertex const& Vertex) const
+    {
+        return ((hash<glm::vec3>()(Vertex.Pos) ^
+                (hash<glm::vec3>()(Vertex.Color) << 1)) >> 1) ^
+                (hash<glm::vec2>()(Vertex.TexCoord) << 1);
+    }
 };
 
 struct UniformBufferObject
@@ -82,23 +107,6 @@ struct UniformBufferObject
     alignas(16) glm::mat4 Model;
     alignas(16) glm::mat4 View;
     alignas(16) glm::mat4 Projection;
-};
-
-const std::vector<Vertex> Vertices = {
-        {{-0.5f, -0.5f, 0.f},{1.f, 0.f, 0.f},{1.f, 0.f}},
-        {{0.5f, -0.5f, 0.f},{0.f, 1.f, 0.f},{0.f, 0.f}},
-        {{0.5f, 0.5f, 0.f},{0.f, 0.f, 1.f},{0.f, 1.f}},
-        {{-0.5f, 0.5f, 0.f},{1.f, 1.f, 1.f},{1.f, 1.f}},
-
-        {{-0.5f, -0.5f, -0.5f},{1.f, 0.f, 0.f},{1.f, 0.f}},
-        {{0.5f, -0.5f, -0.5f},{0.f, 1.f, 0.f},{0.f, 0.f}},
-        {{0.5f, 0.5f, -0.5f},{0.f, 0.f, 1.f},{0.f, 1.f}},
-        {{-0.5f, 0.5f, -0.5f},{1.f, 1.f, 1.f},{1.f, 1.f}},
-};
-
-const std::vector<uint16_t> Indices = {
-        0, 1, 2, 2, 3, 0,
-        4, 5, 6, 6, 7, 4
 };
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
@@ -698,8 +706,8 @@ private:
 
     void CreateGraphicsPipeline()
     {
-        auto VertexShaderCode = ReadFile("../shaders/triangle_vert.spv");
-        auto FragmentShaderCode = ReadFile("../shaders/triangle_frag.spv");
+        auto VertexShaderCode = ReadFile("shaders/triangle_vert.spv");
+        auto FragmentShaderCode = ReadFile("shaders/triangle_frag.spv");
 
         VkShaderModule VertexShaderModule = CreateShaderModule(VertexShaderCode);
         VkShaderModule FragmentShaderModule = CreateShaderModule(FragmentShaderCode);
@@ -991,7 +999,7 @@ private:
             VkBuffer VertexBuffers[] = {VertexBuffer};
             VkDeviceSize Offsets[] = {0};
             vkCmdBindVertexBuffers(CommandBuffers[i], 0, 1, VertexBuffers, Offsets);
-            vkCmdBindIndexBuffer(CommandBuffers[i], IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+            vkCmdBindIndexBuffer(CommandBuffers[i], IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
             vkCmdBindDescriptorSets(CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, PipelineLayout, 0, 1, &DescriptorSets[i], 0,
                                     nullptr);
@@ -1329,7 +1337,7 @@ private:
     void CreateTextureImage()
     {
         int TexWidth, TexHeight, TexChannels;
-        stbi_uc* Pixels = stbi_load("../textures/texture.jpeg", &TexWidth, &TexHeight, &TexChannels, STBI_rgb_alpha);
+        stbi_uc* Pixels = stbi_load(TEXTURE_PATH.c_str(), &TexWidth, &TexHeight, &TexChannels, STBI_rgb_alpha);
         VkDeviceSize ImageSize = TexWidth * TexHeight * 4;
 
         if (!Pixels)
@@ -1528,6 +1536,51 @@ private:
         TransitionImageLayout(DepthImage, DepthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
     }
 
+    void LoadModel()
+    {
+        tinyobj::attrib_t Attrib;
+        std::vector<tinyobj::shape_t> Shapes;
+        std::vector<tinyobj::material_t> Materials;
+        std::string Warn, Err;
+
+        if (!tinyobj::LoadObj(&Attrib, &Shapes, &Materials, &Warn, &Err, MODEL_PATH.c_str()))
+        {
+            throw std::runtime_error(Warn + Err);
+        }
+
+        std::unordered_map<Vertex, uint32_t> UniqueVertices{};
+
+
+        for (const auto& Shape : Shapes)
+        {
+            for (const auto& Index : Shape.mesh.indices)
+            {
+                Vertex Vert{};
+
+                Vert.Pos = {
+                        Attrib.vertices[3 * Index.vertex_index + 0],
+                        Attrib.vertices[3 * Index.vertex_index + 1],
+                        Attrib.vertices[3 * Index.vertex_index + 2]
+                };
+
+                Vert.TexCoord = {
+                        Attrib.texcoords[2 * Index.texcoord_index + 0],
+                        1.f - Attrib.texcoords[2 * Index.texcoord_index + 1],
+                };
+
+                Vert.Color = {1.f, 1.f, 1.f};
+
+                if (UniqueVertices.find(Vert) == UniqueVertices.end())
+                {
+                    UniqueVertices[Vert] = static_cast<uint32_t>(Vertices.size());
+                    Vertices.push_back(Vert);
+                }
+
+                Indices.push_back(UniqueVertices[Vert]);
+            }
+        }
+    }
+
     void InitVulkan()
     {
         CreateInstance();
@@ -1546,6 +1599,7 @@ private:
         CreateTextureImage();
         CreateTextureImageView();
         CreateTextureSampler();
+        LoadModel();
         CreateVertexBuffer();
         CreateIndexBuffer();
         CreateUniformBuffers();
@@ -1740,6 +1794,10 @@ private:
 
     std::vector<VkBuffer> UniformBuffers;
     std::vector<VkDeviceMemory> UniformBuffersMemory;
+
+    std::vector<Vertex> Vertices;
+    std::vector<uint32_t> Indices;
+
 
 };
 
