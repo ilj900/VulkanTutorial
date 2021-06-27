@@ -684,7 +684,7 @@ private:
 
         for (std::size_t i = 0; i < SwapChainImages.size(); ++i)
         {
-            SwapChainImageViews[i] = CreateImageView(SwapChainImages[i], SwapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+            SwapChainImageViews[i] = CreateImageView(SwapChainImages[i], SwapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
     }
 
@@ -1087,7 +1087,7 @@ private:
         EndSingleTimeCommand(CommandBuffer);
     }
 
-    void TransitionImageLayout(VkImage Image, VkFormat Format, VkImageLayout OldLayout, VkImageLayout NewLayout)
+    void TransitionImageLayout(VkImage Image, VkFormat Format, VkImageLayout OldLayout, VkImageLayout NewLayout, uint32_t MipLevels)
     {
         VkCommandBuffer CommandBuffer = BeginSingleTimeCommands();
 
@@ -1099,7 +1099,7 @@ private:
         Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         Barrier.image = Image;
         Barrier.subresourceRange.baseMipLevel = 0;
-        Barrier.subresourceRange.levelCount = 1;
+        Barrier.subresourceRange.levelCount = MipLevels;
         Barrier.subresourceRange.baseArrayLayer = 0;
         Barrier.subresourceRange.layerCount = 1;
 
@@ -1339,6 +1339,7 @@ private:
         int TexWidth, TexHeight, TexChannels;
         stbi_uc* Pixels = stbi_load(TEXTURE_PATH.c_str(), &TexWidth, &TexHeight, &TexChannels, STBI_rgb_alpha);
         VkDeviceSize ImageSize = TexWidth * TexHeight * 4;
+        MipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(TexWidth, TexHeight)))) + 1;
 
         if (!Pixels)
         {
@@ -1353,17 +1354,17 @@ private:
         vkUnmapMemory(Device, StagingBufferMemory);
         stbi_image_free(Pixels);
 
-        CreateImage(TexWidth, TexHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, TextureImage, TextureImageMemory);
+        CreateImage(TexWidth, TexHeight, MipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, TextureImage, TextureImageMemory);
 
-        TransitionImageLayout(TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        TransitionImageLayout(TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, MipLevels);
         CopyBufferToImage(StagingBuffer, TextureImage, static_cast<uint32_t>(TexWidth), static_cast<uint32_t>(TexHeight));
-        TransitionImageLayout(TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
+        GenerateMipmaps(TextureImage, VK_FORMAT_R8G8B8A8_SRGB, TexWidth, TexHeight, MipLevels);
         vkDestroyBuffer(Device, StagingBuffer, nullptr);
         vkFreeMemory(Device, StagingBufferMemory, nullptr);
     }
 
-    void CreateImage(uint32_t Width, uint32_t Height, VkFormat Format, VkImageTiling Tiling, VkImageUsageFlags Usage, VkMemoryPropertyFlags Properties, VkImage& Image, VkDeviceMemory& ImageMemory)
+    void CreateImage(uint32_t Width, uint32_t Height, uint32_t MipLevels, VkFormat Format, VkImageTiling Tiling, VkImageUsageFlags Usage, VkMemoryPropertyFlags Properties, VkImage& Image, VkDeviceMemory& ImageMemory)
     {
         VkImageCreateInfo ImageInfo{};
         ImageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1371,7 +1372,7 @@ private:
         ImageInfo.extent.width = Width;
         ImageInfo.extent.height = Height;
         ImageInfo.extent.depth = 1;
-        ImageInfo.mipLevels = 1;
+        ImageInfo.mipLevels = MipLevels;
         ImageInfo.arrayLayers = 1;
         ImageInfo.format = Format;
         ImageInfo.tiling = Tiling;
@@ -1436,7 +1437,7 @@ private:
         vkFreeCommandBuffers(Device, CommandPool, 1, &CommandBuffer);
     }
 
-    VkImageView CreateImageView(VkImage Image, VkFormat Format, VkImageAspectFlags AspectFlags)
+    VkImageView CreateImageView(VkImage Image, VkFormat Format, VkImageAspectFlags AspectFlags, uint32_t MipLevels)
     {
         VkImageViewCreateInfo ViewInfo{};
         ViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1445,7 +1446,7 @@ private:
         ViewInfo.format = Format;
         ViewInfo.subresourceRange.aspectMask = AspectFlags;
         ViewInfo.subresourceRange.baseMipLevel = 0;
-        ViewInfo.subresourceRange.levelCount = 1;
+        ViewInfo.subresourceRange.levelCount = MipLevels;
         ViewInfo.subresourceRange.baseArrayLayer = 0;
         ViewInfo.subresourceRange.layerCount = 1;
 
@@ -1460,7 +1461,7 @@ private:
 
     void CreateTextureImageView()
     {
-        TextureImageView = CreateImageView(TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+        TextureImageView = CreateImageView(TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, MipLevels);
     }
 
     void CreateTextureSampler()
@@ -1484,7 +1485,7 @@ private:
         SamplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
         SamplerInfo.mipLodBias = 0.f;
         SamplerInfo.minLod = 0.f;
-        SamplerInfo.maxLod = 0.f;
+        SamplerInfo.maxLod = static_cast<float>(MipLevels);
 
         if (vkCreateSampler(Device, &SamplerInfo, nullptr, &TextureSampler) != VK_SUCCESS)
         {
@@ -1530,10 +1531,10 @@ private:
     {
         VkFormat DepthFormat = FindDepthFormat();
 
-        CreateImage(SwapChainExtent.width, SwapChainExtent.height, DepthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, DepthImage, DepthImageMemory);
-        DepthImageView = CreateImageView(DepthImage, DepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+        CreateImage(SwapChainExtent.width, SwapChainExtent.height, 1, DepthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, DepthImage, DepthImageMemory);
+        DepthImageView = CreateImageView(DepthImage, DepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 
-        TransitionImageLayout(DepthImage, DepthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        TransitionImageLayout(DepthImage, DepthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
     }
 
     void LoadModel()
@@ -1579,6 +1580,86 @@ private:
                 Indices.push_back(UniqueVertices[Vert]);
             }
         }
+    }
+
+    void GenerateMipmaps(VkImage Image, VkFormat ImageFormat, int32_t TexWidth, int32_t TexHeight, uint32_t mipLevels)
+    {
+        VkFormatProperties FormatFroperties;
+        vkGetPhysicalDeviceFormatProperties(PhysicalDevice, ImageFormat, &FormatFroperties);
+
+        if (!(FormatFroperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
+        {
+            throw std::runtime_error("Texture image format does not support linear blitting!");
+        }
+
+        VkCommandBuffer CommandBuffer = BeginSingleTimeCommands();
+
+        VkImageMemoryBarrier Barrier{};
+        Barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        Barrier.image = Image;
+        Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        Barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        Barrier.subresourceRange.baseArrayLayer = 0;
+        Barrier.subresourceRange.layerCount = 1;
+        Barrier.subresourceRange.levelCount = 1;
+
+        int32_t MipWidth = TexWidth;
+        int32_t MipHeight = TexHeight;
+
+        for (uint32_t i = 1; i < MipLevels; ++i)
+        {
+            Barrier.subresourceRange.baseMipLevel = i - 1;
+            Barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            Barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            Barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            Barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+            vkCmdPipelineBarrier(CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &Barrier);
+
+            VkImageBlit Blit{};
+            Blit.srcOffsets[0] = {0, 0, 0};
+            Blit.srcOffsets[1] = {MipWidth, MipHeight, 1};
+            Blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            Blit.srcSubresource.mipLevel = i - 1;
+            Blit.srcSubresource.baseArrayLayer = 0;
+            Blit.srcSubresource.layerCount = 1;
+            Blit.dstOffsets[0] = {0, 0, 0};
+            Blit.dstOffsets[1] = {MipWidth > 1 ? MipWidth / 2 : 1, MipHeight > 1 ? MipHeight / 2 : 1, 1};
+            Blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            Blit.dstSubresource.mipLevel = i;
+            Blit.dstSubresource.baseArrayLayer = 0;
+            Blit.dstSubresource.layerCount = 1;
+
+            vkCmdBlitImage(CommandBuffer, Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &Blit, VK_FILTER_LINEAR);
+
+            Barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            Barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            Barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            Barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+            vkCmdPipelineBarrier(CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,nullptr, 0, nullptr, 1, &Barrier);
+
+            if (MipWidth > 1)
+            {
+                MipWidth /= 2;
+            }
+
+            if (MipHeight > 1)
+            {
+                MipHeight /= 2;
+            }
+        }
+
+        Barrier.subresourceRange.baseMipLevel = MipLevels - 1;
+        Barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        Barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        Barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        Barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,nullptr, 0, nullptr, 1, &Barrier);
+
+        EndSingleTimeCommand(CommandBuffer);
     }
 
     void InitVulkan()
@@ -1784,6 +1865,7 @@ private:
     VkDeviceMemory IndexBufferMemory;
     VkBuffer StagingBuffer;
     VkDeviceMemory StagingBufferMemory;
+    uint32_t  MipLevels;
     VkImage TextureImage;
     VkDeviceMemory TextureImageMemory;
     VkImageView TextureImageView;
