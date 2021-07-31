@@ -5,12 +5,13 @@
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define GLM_ENABLE_EXPERIMENTAL
 
-#include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
-#include "glm/gtx/hash.hpp"
+#include "main.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
 
 #include <array>
 #include <chrono>
@@ -22,9 +23,6 @@
 #include <stdexcept>
 #include <vector>
 #include <unordered_map>
-
-#define TINYOBJLOADER_IMPLEMENTATION
-#include "tiny_obj_loader.h"
 
 using uint = std::uint32_t;
 
@@ -50,9 +48,9 @@ const bool bEnableValidationLayers = false;
 #endif
 
 struct Vertex {
-    glm::vec3 Pos;
-    glm::vec3 Color;
-    glm::vec2 TexCoord;
+    FVector3 Pos;
+    FVector3 Color;
+    FVector2 TexCoord;
 
     static VkVertexInputBindingDescription GetBindingDescription()
     {
@@ -96,17 +94,17 @@ template<> struct std::hash<Vertex>
 {
     size_t operator()(Vertex const& Vertex) const
     {
-        return ((hash<glm::vec3>()(Vertex.Pos) ^
-                (hash<glm::vec3>()(Vertex.Color) << 1)) >> 1) ^
-                (hash<glm::vec2>()(Vertex.TexCoord) << 1);
+        return ((hash<FVector3>()(Vertex.Pos) ^
+                (hash<FVector3>()(Vertex.Color) << 1)) >> 1) ^
+                (hash<FVector2>()(Vertex.TexCoord) << 1);
     }
 };
 
 struct UniformBufferObject
 {
-    alignas(16) glm::mat4 Model;
-    alignas(16) glm::mat4 View;
-    alignas(16) glm::mat4 Projection;
+    alignas(16) FMatrix4 Model;
+    alignas(16) FMatrix4 View;
+    alignas(16) FMatrix4 Projection;
 };
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
@@ -1847,10 +1845,9 @@ private:
         float Time = std::chrono::duration<float, std::chrono::seconds::period>(CurrentTime - StartTime).count();
 
         UniformBufferObject UBO{};
-        UBO.Model = glm::rotate(glm::mat4(1.f), Time * glm::radians(90.f), glm::vec3(0.f, 0.f, 1.f));
-        UBO.View = glm::lookAt(glm::vec3(2.f, 2.f, 2.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 1.f));
-        UBO.Projection = glm::perspective(glm::radians((45.f)), SwapChainExtent.width / (float) SwapChainExtent.height, 0.1f, 10.f);
-        UBO.Projection[1][1] *= -1;
+        UBO.Model = Rotate(Time * 1.f, FVector3(0.f, 0.f, 1.f));
+        UBO.View = LookAt(FVector3(2.f, 2.f, 2.f), FVector3(0.f, 0.f, 0.f), FVector3(0.f, 0.f, 1.f));
+        UBO.Projection = GetPerspective(0.785398f, SwapChainExtent.width / (float) SwapChainExtent.height, 0.1f, 10.f);
 
         void* Data;
         vkMapMemory(Device, UniformBuffersMemory[CurrentImage], 0, sizeof(UBO), 0, &Data);

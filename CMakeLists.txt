@@ -5,14 +5,12 @@ project(vulkan_tutorial)
 find_package(Vulkan REQUIRED)
 
 add_subdirectory(glfw)
-add_subdirectory(glm)
 
 set(CMAKE_CXX_STANDARD 17)
 
 include_directories(include
                     glfw/incldue
-                    ${VULKAN_PATH}/Include
-                    glm)
+                    ${VULKAN_PATH}/Include)
 
 link_directories(libs)
 
