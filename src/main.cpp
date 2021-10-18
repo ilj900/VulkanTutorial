@@ -23,6 +23,7 @@
 #include <stdexcept>
 #include <vector>
 #include <unordered_map>
+#include <filesystem>
 
 using uint = std::uint32_t;
 
@@ -94,9 +95,9 @@ template<> struct std::hash<Vertex>
 {
     size_t operator()(Vertex const& Vertex) const
     {
-        return ((hash<FVector3>()(Vertex.Pos) ^
-                (hash<FVector3>()(Vertex.Color) << 1)) >> 1) ^
-                (hash<FVector2>()(Vertex.TexCoord) << 1);
+        return ((std::hash<FVector3>()(Vertex.Pos) ^
+                (std::hash<FVector3>()(Vertex.Color) << 1)) >> 1) ^
+                (std::hash<FVector2>()(Vertex.TexCoord) << 1);
     }
 };
 
@@ -711,6 +712,7 @@ private:
 
     void CreateGraphicsPipeline()
     {
+        std::cout << std::filesystem::current_path() << std::endl;
         auto VertexShaderCode = ReadFile("shaders/triangle_vert.spv");
         auto FragmentShaderCode = ReadFile("shaders/triangle_frag.spv");
 
